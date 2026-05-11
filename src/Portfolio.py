@@ -1,9 +1,17 @@
+"""Portfolio data model to compute value, weights and returns from position sizing and price history."""
+
 import pandas as pd
 import numpy as np
 
 class Portfolio:
+    """Encapsulates static position data and core portfolio metric calculations."""
 
     def __init__(self, portfolio):
+        """Create Portfolio from positions series.
+
+        Parameters:
+            portfolio (pd.Series): Quantity indexed by ticker.
+        """
         self.positions = portfolio
 
     # Modify portfolio
@@ -23,12 +31,14 @@ class Portfolio:
     # Util functions
 
     def get_tickers(self):
+        """Return the list of portfolio tickers."""
         return self.positions.index.to_list()
     
     def get_weights(self, prices):
         return (self.positions * prices)/(self.positions * prices).sum()
     
     def get_positions(self):
+        """Return the raw positions series."""
         return self.positions
     
     def get_portfolio_value(self, prices):
@@ -38,6 +48,15 @@ class Portfolio:
         return (self.positions * market_data).sum(axis=1)
     
     def get_portfolio_returns(self, market_data, type="logret"):
+        """Compute portfolio returns from historical values.
+
+        Parameters:
+            market_data (pd.DataFrame): Asset price history.
+            type (str): 'logret' for log returns, 'ret' for arithmetic returns.
+
+        Returns:
+            pd.Series: Portfolio returns.
+        """
         prices = (self.positions * market_data).sum(axis=1)
         if type=="logret":
             return np.log(prices/prices.shift(1)).iloc[1:]

@@ -9,10 +9,18 @@ from .MonteCarlo import monte_carlo_returns_simulation
 from .Utils import frequency_horizon_converter
 
 class RiskEngine:
+    """Core risk engine computing portfolio metrics, VaR/cVaR, and risk contributions."""
 
     num_simu_monte_carlo = 100000
+    risk_engine_initiated = False
 
     def __init__(self, curr_positions, benchmark_ticker):
+        """Initialize RiskEngine by storing portfolio and loading market data.
+
+        Parameters:
+            curr_positions (pd.Series): Quantity of assets owned for each ticker.
+            benchmark_ticker (str): Benchmark ticker symbol.
+        """
 
         self.portfolio = Portfolio(curr_positions)
         
@@ -20,17 +28,26 @@ class RiskEngine:
         self.risk_free_rate = 0.01
 
         # We retrieve the data for the tickers
-        self.data_manager = DataManager(self.portfolio.get_tickers(), benchmark_ticker)
+        try:
+            self.data_manager = DataManager(self.portfolio.get_tickers(), benchmark_ticker)
+        except Exception as e:
+            raise e 
+
         
 
     def update_positions(self, new_positions):
+        """Synchronize portfolio positions and tickers with user modifications.
+
+        Parameters:
+            new_positions (dict): expected keys 'edited_rows', 'added_rows', 'deleted_rows'.
+        """
         # New positions format: {
         #   'edited_rows': {index: {"Ticker or Quantity": new_value}}, 
         #   'added_rows': [{'Ticker': 'new ticker', 'Quantity': "new_quantity"}], 
         #   'deleted_rows': [indexes]
         # }
         
-        former_positions = self.portfolio.get_positions()
+        former_positions = self.portfolio.get_positions().copy(deep=True)
         
         # If ticker in former position, we modify the quantity
         for row_index, row_value in new_positions["edited_rows"].items():
@@ -61,11 +78,14 @@ class RiskEngine:
     ##################################################################
     
     def get_exposition(self):
-        """ This method is aimed to describe the exposition of the portfolio. This involves three type of exposure:
-        - The weights of the portoflio, to visually see the proportion invested in each asset,
-        - The sectorial aggregated weights, to see if the portfolio is heavily exposed to a specific sector,
-        - The geographically aggregated weights, to see if the portfolio is heavily exposed to a specific region.
-        This method returns three Series containing each exposure statistics.
+        """Describe portfolio exposure across positions, weights, sectors and countries.
+
+        Returns:
+            tuple: (positions, weights, sector_exposure_df, country_exposure_df)
+                positions (pd.Series): Quantity by ticker.
+                weights (pd.Series): Portfolio weight by ticker.
+                sector_exposure_df (pd.DataFrame): sector and weight values.
+                country_exposure_df (pd.DataFrame): country and weight values.
         """
         # Weights retrieval
         weights = self.portfolio.get_weights(self.data_manager.get_current_price())
@@ -74,9 +94,9 @@ class RiskEngine:
         sectorial_exposure = defaultdict(float)
         geographical_exposure = defaultdict(float)
         for curr_ticker in self.portfolio.get_tickers():
-            sector, region = self.data_manager.get_assets_info(curr_ticker)
+            sector, country = self.data_manager.get_assets_info(curr_ticker)
             sectorial_exposure[sector] += weights[curr_ticker]
-            geographical_exposure[region] += weights[curr_ticker]
+            geographical_exposure[country] += weights[curr_ticker]
         
         
         positions = self.portfolio.get_positions()
@@ -88,7 +108,16 @@ class RiskEngine:
     ##################################################################
 
     def get_historical_VaR_cVar(self, frequency = 'D', window_size=1, confidence_level=0.95):
-        
+        """Compute historical VaR and CVaR for a given frequency and confidence level.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+            confidence_level (float): Confidence level (e.g., 0.95).
+
+        Returns:
+            tuple[float, float]: (VaR, CVaR) as positive numbers.
+        """
         # We compute the portfolio returns and its current value
         portfolio_returns = self.portfolio.get_portfolio_returns(self.data_manager.get_market_data(window_size))
         portfolio_value = self.portfolio.get_portfolio_value(self.data_manager.get_current_price())
@@ -102,6 +131,16 @@ class RiskEngine:
         return - var * portfolio_value, - cvar * portfolio_value
     
     def get_variance_covariance_VaR_cVar(self, frequency = 'D', window_size=1, confidence_level=0.95):
+        """Compute parametric variance-covariance VaR and CVaR based on normal distribution.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+            confidence_level (float): Confidence level (e.g., 0.95).
+
+        Returns:
+            tuple[float, float]: (VaR, CVaR).
+        """
         #TODO: factor var/covar matrices computations 
         # We get the usefull values
         portfolio_value = self.portfolio.get_portfolio_value(self.data_manager.get_current_price())
@@ -121,6 +160,16 @@ class RiskEngine:
         return var, cvar
     
     def get_Monte_Carlo_VaR_cVar(self, frequency = 'D', window_size=1, confidence_level=0.95):
+        """Estimate VaR and CVaR using Monte Carlo simulation of portfolio returns.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+            confidence_level (float): Confidence level (e.g., 0.95).
+
+        Returns:
+            tuple[float, float]: (VaR, CVaR).
+        """
         #TODO: factor var/covar matrices computations
         # We get the usefull values
         portfolio_value = self.portfolio.get_portfolio_value(self.data_manager.get_current_price())
@@ -143,6 +192,15 @@ class RiskEngine:
     ##################################################################
     
     def get_portfolio_metrics(self, frequency = 'D', window_size=1):
+        """Calculate performance metrics for the portfolio.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+
+        Returns:
+            pd.DataFrame: Metrics table for value, return, volatility, Sharpe, Sortino.
+        """
         ptf_value = self.portfolio.get_portfolio_value(self.data_manager.get_current_price())
         portfolio_returns = self.portfolio.get_portfolio_returns(self.data_manager.get_market_data(window_size))
         total_return = (((1 + portfolio_returns).cumprod() - 1) * 100).iloc[-1]
@@ -159,6 +217,15 @@ class RiskEngine:
         return pd.DataFrame({"Metrics": metrics_dict.keys(), "Value": metrics_dict.values()})
     
     def get_risk_metrics(self, frequency = 'D', window_size=1):
+        """Compute risk metrics including volatility, drawdown and market beta.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+
+        Returns:
+            pd.DataFrame: Risk metrics table with Daily Vol, Annual Vol, Max drawdown, Mkt Beta.
+        """
         portfolio_returns = self.portfolio.get_portfolio_returns(self.data_manager.get_market_data(window_size))
         benchmark_returns = self.data_manager.get_benchmark_returns(window_size=window_size)
         daily_volatility = portfolio_returns.std(ddof=1)
@@ -178,9 +245,27 @@ class RiskEngine:
     ##################################################################
 
     def get_portfolio_values(self, frequency = 'D', window_size=1):
+        """Get historical portfolio value time series.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+
+        Returns:
+            pd.Series: Portfolio values over time.
+        """
         return self.portfolio.get_portfolio_values(self.data_manager.get_market_data(window_size))
     
     def get_drawdowns(self, frequency = 'D', window_size=1):
+        """Compute cumulative drawdown series based on portfolio returns.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+
+        Returns:
+            pd.Series: Drawdowns in percent.
+        """
         portfolio_returns = self.portfolio.get_portfolio_returns(self.data_manager.get_market_data(window_size))
         return ((1 + portfolio_returns).cumprod().div((1 + portfolio_returns).cumprod().cummax()) - 1) * 100
     
@@ -189,6 +274,16 @@ class RiskEngine:
     ##################################################################
     
     def get_portfolio_volatility_risk_contribution(self, frequency = 'D', window_size=1, relative=False):
+        """Calculate contribution of each asset to portfolio volatility.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+            relative (bool): If True, return percent contributions.
+
+        Returns:
+            pd.Series: Contribution by ticker.
+        """
         cov_matrix = self.data_manager.get_covariance_matrix(window_size, "ret")
         weights = self.portfolio.get_weights(self.data_manager.get_current_price())
         
@@ -200,6 +295,17 @@ class RiskEngine:
         return 100*vol_risk_contrib/ptf_th_vol if relative else vol_risk_contrib
     
     def get_portfolio_var_risk_contribution(self, frequency = 'D', window_size=1, relative=False, confidence_level=0.95):
+        """Calculate portfolio VaR contributions per asset using parametric approach.
+
+        Parameters:
+            frequency (str): Horizon code 'D', 'W', or 'M'.
+            window_size (float): Lookback window in years.
+            relative (bool): If True, return percentage of total VaR per asset.
+            confidence_level (float): VaR confidence level (e.g., 0.95).
+
+        Returns:
+            pd.Series: VaR contribution by ticker (absolute or relative).
+        """
         portfolio_value = self.portfolio.get_portfolio_value(self.data_manager.get_current_price())
         cov_matrix = self.data_manager.get_covariance_matrix(window_size, "ret")
         mean_returns = self.data_manager.get_mean_returns(window_size, "ret")

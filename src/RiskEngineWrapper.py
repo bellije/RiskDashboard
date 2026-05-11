@@ -1,21 +1,39 @@
+"""Wrapper for RiskEngine providing application-friendly init/update workflow and prepared tables for UI display."""
+
 import pandas as pd
 import numpy as np
 from .RiskEngine import RiskEngine
 
 class RiskEngineWrapper:
+    """A high-level wrapper around RiskEngine for Streamlit dashboard data orchestration."""
 
     def __init__(self):
+        """Initialize wrapper state before risk engine is configured."""
         self.initial_computations_done = False
 
     def init_risk_engine(self, file_path, benchmark_ticker):
+        """Initialize the risk engine from a CSV position file and benchmark.
+
+        Parameters:
+            file_path (str): Path to CSV containing columns Ticker, Quantity.
+            benchmark_ticker (str): Benchmark ticker symbol.
+
+        Returns:
+            None
+
+        Raises:
+            FileNotFoundError: If the CSV path does not exist.
+            Exception: On unknown read/parse error.
+        """
 
         # We parse the csv file containing the positions
         try:
             curr_positions = pd.read_csv(file_path, index_col="Ticker")["Quantity"]
         except FileNotFoundError:
             print("The file path is not valid.")
+            raise
         except Exception as e:
-            return e
+            raise
 
         # We initialize the risk engine
         self.risk_engine = RiskEngine(curr_positions, benchmark_ticker)
@@ -25,7 +43,15 @@ class RiskEngineWrapper:
         self.initial_computations_done = True
 
     def update_positions(self, new_positions):
-        
+        """Update positions in the risk engine, refresh data and recompute metrics.
+
+        Parameters:
+            new_positions (dict): Mutated rows, added rows, and deleted row indexes from UI data editor.
+
+        Returns:
+            None
+        """
+
         # We assert that the risk_engine has been initialized and first computations have been done
         if not self.initial_computations_done:
             raise Exception("Computations have not been done before")
@@ -40,6 +66,15 @@ class RiskEngineWrapper:
         self.perform_computations()
 
     def perform_computations(self, frequency='D', window_size=1):
+        """Perform all metrics and chart data calculations for the dashboard.
+
+        Parameters:
+            frequency (str): Frequency key, e.g. 'D', 'W', 'M'.
+            window_size (float): Lookback window in years.
+
+        Returns:
+            None
+        """
         # TODO: manage the frequencies
 
         # Setting window_size
@@ -107,6 +142,15 @@ class RiskEngineWrapper:
 
 
     def update_var_cvar_horizon(self, new_horizon='D', confidence=0.95):
+        """Recompute the customizable VaR/cVaR table for a given horizon and confidence level.
+
+        Parameters:
+            new_horizon (str): Horizon frequency code (e.g., 'D', 'W', 'M').
+            confidence (float): Confidence level for VaR/cVaR.
+
+        Returns:
+            None
+        """
 
         up_historical_var, up_historical_cvar = self.risk_engine.get_historical_VaR_cVar(frequency=new_horizon, window_size=self.window_size, confidence_level=confidence)
         up_parametric_var, up_parametric_cvar = self.risk_engine.get_variance_covariance_VaR_cVar(frequency=new_horizon, window_size=self.window_size, confidence_level=confidence)
@@ -123,6 +167,16 @@ class RiskEngineWrapper:
         self.updatable_var_cvar["Value ($)"] = self.updatable_var_cvar["Value ($)"].map(lambda x: "{:.2f}".format(x) if pd.notna(x) else 'NaN')
 
     def update_benchmark(self, new_benchmark_ticker, frequency="D"):
+        """Update benchmark, recompute risk metrics and portfolio benchmark series.
+
+        Parameters:
+            new_benchmark_ticker (str): Benchmark ticker symbol.
+            frequency (str): Horizon code for metrics (e.g., 'D').
+
+        Returns:
+            None
+        """
+
         self.risk_engine.data_manager.update_benchmark(new_benchmark_ticker)
 
         # Updating the benchmark related computations

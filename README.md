@@ -1,64 +1,83 @@
-# Risk engine for equity portfolios
+# RiskDashboard
 
-Interactive web application for equity portfolio risk analysis, computing VaR, Expected Shortfall, performance metrics, and drawdown visualization.  
+A lightweight interactive risk engine for equity portfolios built with Python and Streamlit.
 
-## Overview
-This project delivers a risk management dashboard for analyzing portfolio risk and performance using historical market data.  
-It implements multiple risk measures (VaR, CVaR/ES, drawdowns) across methodologies, like historical, parametric, and Monte Carlo, and presents results via interactive charts.  
+## Project purpose
 
-## Key Pages:
+Analyze portfolio performance and risk using historical price data, with support for:
+- Value-at-Risk (VaR) and Conditional VaR (CVaR / Expected Shortfall)
+- Historical, parametric (variance-covariance) and Monte Carlo methodologies
+- Drawdown, volatility, Sharpe, Sortino, market beta and more
+- Portfolio exposure by weight, sector and geography
+- Dynamic portfolio editing and multiple benchmarks
 
-**Navbar**: Lookback size; Benchmark choice (MSCI World, S&P500, NASDAQ); Portfolio visualization with possibility to add, remove or modify assets in the portfolio.   
-**Overview**: Portfolio evolution compared to normalized benchmark; portfolio metrics (Value, 1Y return, Annual Vol., Sharpe ratio, Sortino ratio); Visual sectorial and geographical exposures; Risk metrics (VaR and cVaR 95%) for a 1 day period.  
-**Risk**: Portfolio evolution and drawdown; Volatility and VaR contributions of assets; General risk metrics (Daily vol., Annual vol., Max drawdown, Market beta); Custom VaR/cVaR (1 day, 1 week, 1 month for 95%, 97.5%, 99% confidence).  
+## Features
 
-## Tech Stack
+- Import portfolio from CSV: `Ticker,Quantity`
+- Auto-fetch 3 years of historical quotes from Yahoo Finance (`yfinance`)
+- Realtime portfolio and benchmark evolution charts (Plotly)
+- Interactive dashboard (Streamlit) with tabs:
+  - Overview
+  - Risk
+- Custom horizon VaR/CVaR (1 day / 1 week / 1 month)
+- Risk contribution by asset (volatility + VaR)
+- Simple portfolio drawdown analysis
 
-**Backend**: Python 3.10+ (NumPy, pandas for calculations; yfinance for data)  
-**Frontend**: Streamlit (Single page application with tabs) + Plotly/ (interactive charts)  
-**Data**: yFinance (retrieved live)  
+## Repository structure
 
-## Quick Start
+- `RiskDashboard.py`: Streamlit app entrypoint
+- `src/`
+  - `DataManager.py`: market and benchmark data retrieval + derived returns/covariances
+  - `Portfolio.py`: positions, values, returns, weights
+  - `RiskEngine.py`: risk calculations and metrics
+  - `RiskEngineWrapper.py`: UI-friendly computed results
+  - `MonteCarlo.py`: Monte Carlo return simulation
+  - `Utils.py`: horizon and lookup converters
+- `file.csv`: example portfolio input
+- `requirements.txt`: Python dependencies
 
-### Prerequisites
+## Requirements
 
-```console
-Python >= 3.10
+- Python >= 3.10
+
+```bash
 pip install -r requirements.txt
+```
+
+## Run
+
+```bash
 streamlit run RiskDashboard.py
 ```
-Open http://localhost:8501.
 
-### Your portfolio
+Browse: `http://localhost:8501`
 
-To import a portfolio in the risk engine, use a csv file structured as follow (an example is given in file.csv):  
-Ticker, Quantity  
-AAPL, 48  
-MSFT, 60  
-AMD, 92  
-...  
-Those tickers have to exist as yFinance tickers.
+## Portfolio input format
 
-### Usage Workflow
+CSV must include 2 columns (header is required):
 
-**Data Input**: Load portfolio via CSV and choose benchmark (auto-fetch 3Y history of prices for assets and benchmark).  
+```csv
+Ticker,Quantity
+AAPL,48
+MSFT,60
+AMD,92
+```
 
-#### Navigate Pages:
-**Overview**: Visualize portfolio evolution, exposure and performance metrics.  
-**Risk**: Visualize drawdowns, risk contribution and risk metrics.  
+- Ticker symbols must be valid Yahoo ticker names
+- Quantity is numerical number of shares
 
-## Tech Stack
+## Notes
 
-**Backend**: Python 3.10+ (NumPy, pandas, SciPy for risk calcs; yfinance for data)  
-**Frontend**: Streamlit (multipage app) + Plotly/Altair (interactive charts)  
-**Data**: CSV upload or live tickers (Yahoo Finance, local files)  
+- The project uses 252 trading days for annualization
+- If a symbol fails in yfinance or is invalid, it may raise in data load
+- Risk free rate is currently fixed at 1% in `RiskEngine`
 
-## Roadmap
+## Roadmap (future improvements)
 
-- Errors management  
-- Documentation detailing  
-- Stress testing  
-- GARCH volatility models  
-- Factor risk decomposition (Fama-French)  
-- Real-time data via WebSocket  
-- Multi-portfolio comparison  
+- Better error handling/validation for tickers and CSV upload
+- Support for non-US market calendars and missing data imputation
+- Stress testing and scenario analysis
+- GARCH volatility modeling
+- Factor risk decomposition (Fama-French)
+- Real-time updates and websocket data
+- Multiple portfolio comparison
